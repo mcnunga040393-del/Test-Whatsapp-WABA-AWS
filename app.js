@@ -5,7 +5,7 @@ const app = express().use(bodyParser.json());
 
 // Set up the Amazon Connect client
 const connect = new AWS.Connect({
-    region: process.env.AWS_APP_REGION // e.g., ap-southeast-1
+    region: process.env.AWS_APP_REGION
 });
 
 app.get('/webhook', (req, res) => {
@@ -23,7 +23,8 @@ app.get('/webhook', (req, res) => {
 app.post('/webhook', async (req, res) => {
     const body = req.body;
 
-    if (body.object === 'whatsapp_business_account' && body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]) {
+    // Verify incoming payload contains a WhatsApp message data structure
+    if (body.object === 'whatsapp_business_account' && body.entry && body.entry[0].changes && body.entry[0].changes[0].value.messages) {
         const messageData = body.entry[0].changes[0].value.messages[0];
         const fromNumber = messageData.from;
         const messageText = messageData.text?.body || "Incoming WhatsApp Media";
@@ -36,8 +37,13 @@ app.post('/webhook', async (req, res) => {
                 InstanceId: process.env.CONNECT_INSTANCE_ID,
                 ContactFlowId: process.env.CONNECT_FLOW_ID,
                 ParticipantDetails: { DisplayName: fromNumber },
+                // CRUCIAL: Pass the initial message so the AWS contact flow engine triggers routing
+                InitialMessage: {
+                    ContentType: "text/plain",
+                    Content: messageText
+                },
                 Attributes: {
-                    "connect:WhatsApp": "true" // Triggers your Contact Flow check block
+                    "connect:WhatsApp": "true"
                 },
                 SegmentAttributes: {
                     "Subtype": {
