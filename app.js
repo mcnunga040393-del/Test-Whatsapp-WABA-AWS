@@ -1,37 +1,39 @@
-// Import Express.js
 const express = require('express');
+const bodyParser = require('body-parser');
+const app = express().use(bodyParser.json());
 
-// Create an Express app
-const app = express();
+// This handles the validation step you did earlier with Meta
+app.get('/webhook', (req, res) => {
+    const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
+    
+    const mode = req.query['hub.mode'];
+    const token = req.query['hub.verify_token'];
+    const challenge = req.query['hub.challenge'];
 
-// Middleware to parse JSON bodies
-app.use(express.json());
-
-// Set port and verify_token
-const port = process.env.PORT || 3000;
-const verifyToken = process.env.VERIFY_TOKEN;
-
-// Route for GET requests
-app.get('/', (req, res) => {
-  const { 'hub.mode': mode, 'hub.challenge': challenge, 'hub.verify_token': token } = req.query;
-
-  if (mode === 'subscribe' && token === verifyToken) {
-    console.log('WEBHOOK VERIFIED');
-    res.status(200).send(challenge);
-  } else {
-    res.status(403).end();
-  }
+    if (mode && token) {
+        if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+            console.log('WEBHOOK VERIFIED');
+            res.status(200).send(challenge);
+        } else {
+            res.sendStatus(403);
+        }
+    }
 });
 
-// Route for POST requests
-app.post('/', (req, res) => {
-  const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 19);
-  console.log(`\n\nWebhook received ${timestamp}\n`);
-  console.log(JSON.stringify(req.body, null, 2));
-  res.status(200).end();
+// This captures incoming WhatsApp texts and hands them off safely
+app.post('/webhook', (req, res) => {
+    const body = req.body;
+
+    if (body.object === 'whatsapp_business_account') {
+        if (body.entry && body.entry[0].changes && body.entry[0].changes[0].value.messages) {
+            console.log("Incoming WhatsApp Message Detected:", JSON.stringify(body, null, 2));
+            // Amazon Connect natively expects a 200 OK back from your webhook handler
+            return res.status(200).send('EVENT_RECEIVED');
+        }
+        res.sendStatus(200);
+    } else {
+        res.sendStatus(404);
+    }
 });
 
-// Start the server
-app.listen(port, () => {
-  console.log(`\nListening on port ${port}\n`);
-});
+app.listen(process.env.PORT || 1337, () => console.log('Webhook server is listening...'));
